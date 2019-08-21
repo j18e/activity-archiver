@@ -1,0 +1,20 @@
+version: '3'
+services:
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_DATABASE: backup
+      MYSQL_ROOT_PASSWORD: supersecret
+    ports: ["3306:3306"]
+    volumes:
+    - "./tmp/data:/var/lib/mysql"
+  grafana:
+    image: "grafana/grafana"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: secret
+    ports: ["3000:3000"]
+    volumes:
+    - "./dev/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro"
+    - "./dev/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro"
+    - "./dev/dashboard.json:/etc/grafana/dashboards/dashboard.json:ro"
+
