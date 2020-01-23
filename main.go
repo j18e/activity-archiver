@@ -28,14 +28,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("getting hostname: %v", err)
 	}
+	log.Infof("using hostname %s", hostname)
 
 	idbAddr := flag.String("influx.url", "", "url to the influxdb server")
+	idbUser := flag.String("influx.user", "", "user to the influxdb server")
+	idbPass := flag.String("influx.password", "", "password to the influxdb server")
 	flag.Parse()
 	if *idbAddr == "" {
 		log.Fatal("required flag -influx.url")
 	}
 
-	cli, err := NewClient(*idbAddr, DB_NAME)
+	cli, err := NewClient(influx.HTTPConfig{Addr: *idbAddr, Username: *idbUser, Password: *idbPass}, DB_NAME)
 	if err != nil {
 		log.Fatalf("connecting to influxdb: %v", err)
 	}
@@ -52,7 +55,7 @@ func main() {
 		}
 		last, err := cli.LastFirefoxEntry(hostname, p.Name)
 		if err != nil {
-			log.Errorf("getting last firefox entry for profile %s: %v", p.Name, err)
+			log.Errorf("getting last firefox entry for profile %s from influxdb: %v", p.Name, err)
 			continue
 		}
 		payload := make([]*firefox.Entry, 0, len(history))
@@ -84,7 +87,7 @@ func main() {
 
 	lastZSH, err := cli.LastZSHEntry(hostname)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("getting last zsh entry from influxdb: %v", err)
 	}
 	zshPayload := make([]*zsh.Entry, 0, len(zshHistory))
 	for _, e := range zshHistory {
@@ -101,7 +104,7 @@ func main() {
 
 	sent, err := cli.PostZSHEntries(hostname, zshPayload)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("posting zsh entries to influxdb: %v", err)
 	}
 
 	log.Infof("successfully posted %d zsh history entries to influxdb", sent)
@@ -121,18 +124,23 @@ func mustGetZshHistory(fileName string) []*zsh.Entry {
 	return zshHistory
 }
 
-func NewClient(idbURL, dbName string) (*Client, error) {
-	idb, err := influx.NewHTTPClient(influx.HTTPConfig{
-		Addr:    idbURL,
-		Timeout: 5 * time.Second,
-	})
+func NewClient(conf influx.HTTPConfig, dbName string) (*Client, error) {
+	const testConnStr = "SELECT last(value) FROM nonexistent"
+	idb, err := influx.NewHTTPClient(conf)
 	if err != nil {
 		return nil, err
 	}
 	defer idb.Close()
 
 	// test connection to influxdb
-	if _, _, err := idb.Ping(5 * time.Second); err != nil {
+	if _, _, err := idb.Ping(conf.Timeout); err != nil {
+		return nil, err
+	}
+	res, err := idb.Query(influx.NewQuery(testConnStr, dbName, "s"))
+	if err != nil {
+		return nil, err
+	}
+	if err := res.Error(); err != nil {
 		return nil, err
 	}
 	return &Client{Client: idb, dbName: dbName}, nil
@@ -148,6 +156,9 @@ func (c *Client) LastFirefoxEntry(hostname, profile string) (*firefox.Entry, err
 		FIREFOX_METRIC, hostname, profile)
 	res, err := c.Query(influx.NewQuery(qs, c.dbName, "s"))
 	if err != nil {
+		return nil, err
+	}
+	if err := res.Error(); err != nil {
 		return nil, err
 	}
 	if len(res.Results) < 1 {
@@ -208,6 +219,9 @@ func (c *Client) LastZSHEntry(hostname string) (*zsh.Entry, error) {
 		c.dbName, "s"),
 	)
 	if err != nil {
+		return nil, err
+	}
+	if err := res.Error(); err != nil {
 		return nil, err
 	}
 	if len(res.Results) < 1 {
