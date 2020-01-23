@@ -1,60 +1,252 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	_ "github.com/influxdata/influxdb1-client" // this is important because of the bug in go mod
 	influx "github.com/influxdata/influxdb1-client/v2"
+	"github.com/j18e/activity-archiver/firefox"
+	"github.com/j18e/activity-archiver/zsh"
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	DB_NAME        = "activity"
+	ZSH_METRIC     = "zsh_history"
+	FIREFOX_METRIC = "firefox_history"
 )
 
 func main() {
-}
-
-type Client influx.Client
-
-func influxStuff() error {
-	addr := "http://localhost:8086"
-	timeout := time.Second * 5
-	cli, err := influx.NewHTTPClient(influx.HTTPConfig{Addr: addr, Timeout: timeout})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer cli.Close()
-
-	// test connection to influxdb
-	if _, _, err := cli.Ping(timeout); err != nil {
-		log.Fatal(err)
-	}
-
-	bp, err := influx.NewBatchPoints(client.BatchPointsConfig{Database: DB_NAME, Precision: "s"})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// define tags
+	// init
 	hostname, err := os.Hostname()
 	if err != nil {
-		return fmt.Sprintf("error: %v", err)
+		log.Fatalf("getting hostname: %v", err)
 	}
-	tags := map[string]string{"device": "cpu-total"}
-	fields := map[string]interface{}{
-		"idle":   10.1,
-		"system": 53.3,
-		"user":   46.6,
-	}
-	pt, err := influx.NewPoint("cpu_usage", tags, fields, time.Now())
+
+	cli, err := NewClient("http://localhost:8086", DB_NAME)
 	if err != nil {
-		fmt.Println("Error: ", err.Error())
+		log.Fatalf("connecting to influxdb: %v", err)
 	}
-	bp.AddPoint(pt)
+
+	// firefox
+	profiles, err := firefox.GetProfiles()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, p := range profiles {
+		history, err := p.History()
+		if err != nil {
+			log.Fatal(err)
+		}
+		last, err := cli.LastFirefoxEntry(hostname, p.Name)
+		if err != nil {
+			log.Errorf("getting last firefox entry for profile %s: %v", p.Name, err)
+			continue
+		}
+		payload := make([]*firefox.Entry, 0, len(history))
+		for _, e := range history {
+			if (last != nil && e.Time.Before(last.Time)) || *last == *e {
+				continue
+			}
+			payload = append(payload, e)
+		}
+
+		if len(payload) < 1 {
+			log.Infof("no new firefox entries from profile %s", p.Name)
+			continue
+		}
+		sent, err := cli.PostFirefoxEntries(hostname, p.Name, payload)
+		if err != nil {
+			log.Errorf("posting firefox history for profile %s to influxdb: %v", p.Name, err)
+			continue
+		}
+		log.Infof("successfully posted %d firefox history entries from profile %s to influxdb", sent, p.Name)
+	}
+
+	// zsh
+	zshHistory := mustGetZshHistory(filepath.Join(os.Getenv("HOME"), ".zsh_history"))
+
+	lastZSH, err := cli.LastZSHEntry(hostname)
+	if err != nil {
+		log.Fatal(err)
+	}
+	zshPayload := make([]*zsh.Entry, 0, len(zshHistory))
+	for _, e := range zshHistory {
+		if lastZSH != nil && e.Time.Before(lastZSH.Time) {
+			continue
+		}
+		zshPayload = append(zshPayload, e)
+	}
+
+	if len(zshPayload) < 1 {
+		log.Info("no new zsh history entries. Exiting...")
+		return
+	}
+
+	sent, err := cli.PostZSHEntries(hostname, zshPayload)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Infof("successfully posted %d zsh history entries to influxdb", sent)
+}
+
+func mustGetZshHistory(fileName string) []*zsh.Entry {
+	file, err := os.Open(filepath.Join(os.Getenv("HOME"), ".zsh_history"))
+	if err != nil {
+		log.Fatalf("opening zsh history: %v", err)
+	}
+	defer file.Close()
+
+	zshHistory, err := zsh.GetHistory(file)
+	if err != nil {
+		log.Fatalf("getting zsh history: %v", err)
+	}
+	return zshHistory
+}
+
+func NewClient(idbURL, dbName string) (*Client, error) {
+	idb, err := influx.NewHTTPClient(influx.HTTPConfig{
+		Addr:    idbURL,
+		Timeout: 5 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer idb.Close()
+
+	// test connection to influxdb
+	if _, _, err := idb.Ping(5 * time.Second); err != nil {
+		return nil, err
+	}
+	return &Client{Client: idb, dbName: dbName}, nil
+}
+
+type Client struct {
+	influx.Client
+	dbName string
+}
+
+func (c *Client) LastFirefoxEntry(hostname, profile string) (*firefox.Entry, error) {
+	qs := fmt.Sprintf("SELECT last(url) FROM %s WHERE device = '%s' AND profile = '%s'",
+		FIREFOX_METRIC, hostname, profile)
+	res, err := c.Query(influx.NewQuery(qs, c.dbName, "s"))
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Results) < 1 {
+		return nil, errors.New("no results found")
+	}
+	if len(res.Results[0].Series) < 1 {
+		return nil, nil
+	}
+	vals := res.Results[0].Series[0].Values
+	if len(vals) < 1 || len(vals[0]) < 2 {
+		return nil, fmt.Errorf("format not recognized: %v", vals)
+	}
+
+	ts, err := vals[0][0].(json.Number).Int64()
+	if err != nil {
+		return nil, fmt.Errorf("getting timestamp: %v", err)
+	}
+
+	url, ok := vals[0][1].(string)
+	if !ok {
+		return nil, fmt.Errorf("converting interface{} to string: %v", vals[0][1])
+	}
+
+	return &firefox.Entry{Time: time.Unix(ts, 0), URL: url}, nil
+}
+
+func (c *Client) PostFirefoxEntries(hostname, profile string, entries []*firefox.Entry) (int, error) {
+	bp, err := influx.NewBatchPoints(influx.BatchPointsConfig{Database: c.dbName, Precision: "s"})
+	if err != nil {
+		return 0, err
+	}
+
+	tags := map[string]string{"device": hostname, "profile": profile}
+	count := 0
+	for _, e := range entries {
+		pt, err := influx.NewPoint(FIREFOX_METRIC, tags,
+			map[string]interface{}{"url": e.URL},
+			e.Time,
+		)
+		if err != nil {
+			log.Errorf("creating datapoint: %v", err)
+			continue
+		}
+		bp.AddPoint(pt)
+		count++
+	}
 
 	// Write the batch
-	if err := cli.Write(bp); err != nil {
-		return err
+	if err := c.Write(bp); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (c *Client) LastZSHEntry(hostname string) (*zsh.Entry, error) {
+	res, err := c.Query(influx.NewQuery(
+		fmt.Sprintf("SELECT last(command) FROM %s WHERE device = '%s'", ZSH_METRIC, hostname),
+		c.dbName, "s"),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Results) < 1 {
+		return nil, errors.New("no results found")
+	}
+	if len(res.Results[0].Series) < 1 {
+		return nil, nil
+	}
+	vals := res.Results[0].Series[0].Values
+	if len(vals) < 1 || len(vals[0]) < 2 {
+		return nil, fmt.Errorf("format not recognized: %v", vals)
 	}
 
-	return nil
+	ts, err := vals[0][0].(json.Number).Int64()
+	if err != nil {
+		return nil, fmt.Errorf("getting timestamp: %v", err)
+	}
+
+	cmd, ok := vals[0][1].(string)
+	if !ok {
+		return nil, fmt.Errorf("converting interface{} to string: %v", vals[0][1])
+	}
+
+	return &zsh.Entry{Time: time.Unix(ts, 0), Command: cmd}, nil
+}
+
+func (c *Client) PostZSHEntries(hostname string, entries []*zsh.Entry) (int, error) {
+	bp, err := influx.NewBatchPoints(influx.BatchPointsConfig{Database: c.dbName, Precision: "s"})
+	if err != nil {
+		return 0, err
+	}
+
+	tags := map[string]string{"device": hostname}
+	count := 0
+	for _, e := range entries {
+		pt, err := influx.NewPoint(ZSH_METRIC, tags,
+			map[string]interface{}{"command": e.Command},
+			e.Time,
+		)
+		if err != nil {
+			log.Errorf("creating datapoint: %v", err)
+			continue
+		}
+		bp.AddPoint(pt)
+		count++
+	}
+
+	// Write the batch
+	if err := c.Write(bp); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
