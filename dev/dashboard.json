@@ -15,23 +15,29 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
+  "iteration": 1579784889963,
   "links": [],
   "panels": [
     {
-      "aliasColors": {},
+      "aliasColors": {
+        "firefox": "semi-dark-orange",
+        "zsh": "semi-dark-green"
+      },
       "bars": true,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "mysql",
+      "datasource": null,
       "fill": 1,
+      "fillGradient": 0,
       "gridPos": {
-        "h": 12,
+        "h": 11,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 5,
-      "interval": "15m",
+      "hiddenSeries": false,
+      "id": 7,
+      "interval": "5m",
       "legend": {
         "avg": false,
         "current": false,
@@ -43,9 +49,10 @@
       },
       "lines": false,
       "linewidth": 1,
-      "links": [],
       "nullPointMode": "null",
-      "options": {},
+      "options": {
+        "dataLinks": []
+      },
       "percentage": false,
       "pointradius": 2,
       "points": false,
@@ -56,52 +63,78 @@
       "steppedLine": false,
       "targets": [
         {
-          "format": "time_series",
-          "group": [
+          "alias": "firefox",
+          "groupBy": [
             {
               "params": [
-                "$__interval",
-                "none"
+                "$__interval"
               ],
               "type": "time"
+            },
+            {
+              "params": [
+                "null"
+              ],
+              "type": "fill"
             }
           ],
-          "metricColumn": "none",
-          "rawQuery": false,
-          "rawSql": "SELECT\n  $__unixEpochGroupAlias(time,$__interval),\n  count(command) AS \"ZSH\"\nFROM zsh\nWHERE\n  $__unixEpochFilter(time)\nGROUP BY 1\nORDER BY $__unixEpochGroup(time,$__interval)",
+          "measurement": "firefox_history",
+          "orderByTime": "ASC",
+          "policy": "default",
           "refId": "A",
+          "resultFormat": "time_series",
+          "select": [
+            [
+              {
+                "params": [
+                  "url"
+                ],
+                "type": "field"
+              },
+              {
+                "params": [],
+                "type": "count"
+              }
+            ]
+          ],
+          "tags": []
+        },
+        {
+          "alias": "zsh",
+          "groupBy": [
+            {
+              "params": [
+                "$__interval"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "null"
+              ],
+              "type": "fill"
+            }
+          ],
+          "measurement": "zsh_history",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "B",
+          "resultFormat": "time_series",
           "select": [
             [
               {
                 "params": [
                   "command"
                 ],
-                "type": "column"
+                "type": "field"
               },
               {
-                "params": [
-                  "count"
-                ],
-                "type": "aggregate"
-              },
-              {
-                "params": [
-                  "ZSH"
-                ],
-                "type": "alias"
+                "params": [],
+                "type": "count"
               }
             ]
           ],
-          "table": "zsh",
-          "timeColumn": "time",
-          "timeColumnType": "bigint",
-          "where": [
-            {
-              "name": "$__unixEpochFilter",
-              "params": [],
-              "type": "macro"
-            }
-          ]
+          "tags": []
         }
       ],
       "thresholds": [],
@@ -128,7 +161,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -146,98 +179,229 @@
       }
     },
     {
-      "columns": [],
-      "fontSize": "100%",
+      "collapsed": false,
+      "datasource": null,
       "gridPos": {
-        "h": 10,
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 5,
+      "panels": [],
+      "repeat": "device",
+      "scopedVars": {
+        "device": {
+          "selected": false,
+          "text": "N104279",
+          "value": "N104279"
+        }
+      },
+      "title": "$device",
+      "type": "row"
+    },
+    {
+      "datasource": "influxdb",
+      "gridPos": {
+        "h": 13,
         "w": 24,
         "x": 0,
         "y": 12
       },
-      "id": 7,
-      "links": [],
-      "options": {},
-      "pageSize": null,
-      "scroll": true,
-      "showHeader": true,
-      "sort": {
-        "col": 0,
-        "desc": true
+      "id": 3,
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending"
       },
-      "styles": [
-        {
-          "alias": "",
-          "dateFormat": "YYYY-MM-DD HH:mm:ss",
-          "pattern": "time",
-          "type": "date"
-        },
-        {
-          "alias": "",
-          "colorMode": null,
-          "colors": [
-            "rgba(245, 54, 54, 0.9)",
-            "rgba(237, 129, 40, 0.89)",
-            "rgba(50, 172, 45, 0.97)"
-          ],
-          "decimals": 2,
-          "pattern": "/.*/",
-          "thresholds": [],
-          "type": "number",
-          "unit": "short"
+      "scopedVars": {
+        "device": {
+          "selected": false,
+          "text": "N104279",
+          "value": "N104279"
         }
-      ],
+      },
       "targets": [
         {
-          "format": "table",
-          "group": [
-            {
-              "params": [
-                "command"
-              ],
-              "type": "column"
-            }
-          ],
-          "metricColumn": "none",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  time,\n  command\nFROM zsh\nWHERE\n  $__unixEpochFilter(time)\nORDER BY time",
+          "groupBy": [],
+          "measurement": "zsh_history",
+          "orderByTime": "ASC",
+          "policy": "default",
           "refId": "A",
+          "resultFormat": "table",
           "select": [
             [
               {
                 "params": [
-                  "value"
+                  "command"
                 ],
-                "type": "column"
+                "type": "field"
               }
             ]
           ],
-          "table": "zsh",
-          "timeColumn": "time",
-          "timeColumnType": "bigint",
-          "where": [
+          "tags": [
             {
-              "name": "$__unixEpochFilter",
-              "params": [],
-              "type": "macro"
+              "key": "device",
+              "operator": "=~",
+              "value": "/^$device$/"
             }
           ]
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "ZSH",
-      "transform": "table",
-      "type": "table"
+      "title": "zsh",
+      "type": "logs"
+    },
+    {
+      "datasource": "influxdb",
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 2,
+      "maxPerRow": 3,
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending"
+      },
+      "repeat": "ff_profile",
+      "repeatDirection": "h",
+      "scopedVars": {
+        "device": {
+          "selected": false,
+          "text": "N104279",
+          "value": "N104279"
+        },
+        "ff_profile": {
+          "selected": false,
+          "text": "m502072u.default-release",
+          "value": "m502072u.default-release"
+        }
+      },
+      "targets": [
+        {
+          "groupBy": [],
+          "measurement": "firefox_history",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "refId": "A",
+          "resultFormat": "table",
+          "select": [
+            [
+              {
+                "params": [
+                  "url"
+                ],
+                "type": "field"
+              }
+            ]
+          ],
+          "tags": [
+            {
+              "key": "device",
+              "operator": "=~",
+              "value": "/^$device$/"
+            },
+            {
+              "condition": "AND",
+              "key": "profile",
+              "operator": "=~",
+              "value": "/^$ff_profile$/"
+            }
+          ]
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "firefox $ff_profile",
+      "type": "logs"
     }
   ],
-  "schemaVersion": 18,
+  "schemaVersion": 21,
   "style": "dark",
   "tags": [],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "influxdb",
+        "definition": "SHOW TAG VALUES WITH KEY = \"device\"",
+        "hide": 2,
+        "includeAll": true,
+        "label": null,
+        "multi": false,
+        "name": "device",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "N104279",
+            "value": "N104279"
+          }
+        ],
+        "query": "SHOW TAG VALUES WITH KEY = \"device\"",
+        "refresh": 0,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "influxdb",
+        "definition": "SHOW TAG VALUES FROM firefox_history WITH KEY = \"profile\"  WHERE device =~ /$device/",
+        "hide": 2,
+        "includeAll": true,
+        "label": null,
+        "multi": false,
+        "name": "ff_profile",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "m502072u.default-release",
+            "value": "m502072u.default-release"
+          }
+        ],
+        "query": "SHOW TAG VALUES FROM firefox_history WITH KEY = \"profile\"  WHERE device =~ /$device/",
+        "refresh": 0,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {
@@ -252,21 +416,10 @@
       "1h",
       "2h",
       "1d"
-    ],
-    "time_options": [
-      "5m",
-      "15m",
-      "1h",
-      "6h",
-      "12h",
-      "24h",
-      "2d",
-      "7d",
-      "30d"
     ]
   },
   "timezone": "",
-  "title": "Activity",
-  "uid": "8Rt7FrdZk",
-  "version": 2
+  "title": "activity",
+  "uid": "main",
+  "version": 10
 }

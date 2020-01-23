@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,7 +29,13 @@ func main() {
 		log.Fatalf("getting hostname: %v", err)
 	}
 
-	cli, err := NewClient("http://localhost:8086", DB_NAME)
+	idbAddr := flag.String("influx.url", "", "url to the influxdb server")
+	flag.Parse()
+	if *idbAddr == "" {
+		log.Fatal("required flag -influx.url")
+	}
+
+	cli, err := NewClient(*idbAddr, DB_NAME)
 	if err != nil {
 		log.Fatalf("connecting to influxdb: %v", err)
 	}
@@ -50,7 +57,11 @@ func main() {
 		}
 		payload := make([]*firefox.Entry, 0, len(history))
 		for _, e := range history {
-			if (last != nil && e.Time.Before(last.Time)) || *last == *e {
+			if last == nil {
+				payload = history
+				break
+			}
+			if e.Time.Before(last.Time) || *last == *e {
 				continue
 			}
 			payload = append(payload, e)

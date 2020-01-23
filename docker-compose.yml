@@ -1,20 +1,22 @@
 version: '3'
 services:
-  mysql:
-    image: mysql:5.7
+  influxdb:
+    restart: always
+    image: influxdb:1.7-alpine
     environment:
-      MYSQL_DATABASE: backup
-      MYSQL_ROOT_PASSWORD: supersecret
-    ports: ["3306:3306"]
+      INFLUXDB_DB: activity
+    ports: ["8086:8086"]
     volumes:
-    - "./tmp/data:/var/lib/mysql"
+    - "/tmp/data:/var/lib/influxdb"
   grafana:
     image: "grafana/grafana"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: secret
+      GF_SECURITY_ADMIN_PASSWORD: "grafpass"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
     ports: ["3000:3000"]
     volumes:
     - "./dev/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro"
     - "./dev/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro"
     - "./dev/dashboard.json:/etc/grafana/dashboards/dashboard.json:ro"
-
