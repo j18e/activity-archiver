@@ -64,10 +64,9 @@ func main() {
 				payload = history
 				break
 			}
-			if e.Time.Before(last.Time) || *last == *e {
-				continue
+			if e.Time.After(last.Time) {
+				payload = append(payload, e)
 			}
-			payload = append(payload, e)
 		}
 
 		if len(payload) < 1 {
@@ -91,10 +90,13 @@ func main() {
 	}
 	zshPayload := make([]*zsh.Entry, 0, len(zshHistory))
 	for _, e := range zshHistory {
-		if lastZSH != nil && e.Time.Before(lastZSH.Time) {
-			continue
+		if lastZSH == nil {
+			zshPayload = zshHistory
+			break
 		}
-		zshPayload = append(zshPayload, e)
+		if e.Time.After(lastZSH.Time) {
+			zshPayload = append(zshPayload, e)
+		}
 	}
 
 	if len(zshPayload) < 1 {
